@@ -69,6 +69,8 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
     var zoomPixelBuffer: CVImageBuffer?
     
     var orientation:CGFloat = 0
+
+    var isVideoMirrored: Bool = true
     
     init(_ registry: FlutterTextureRegistry, _ outputChannel: FlutterMethodChannel) {
         self.registry = registry
@@ -153,6 +155,9 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
         case "setOrientation":
             let arguments = call.arguments as? Dictionary<String, Any> ?? [:]
             orientation = arguments["orientation"] as? Double ?? 0
+        case "setVideoMirrored":
+            let arguments = call.arguments as? Dictionary<String, Any> ?? [:]
+            isVideoMirrored = arguments["isVideoMirrored"] as? Bool ?? true
         case "destroy":
             destroy(result)
         case "setFocusPoint":
@@ -301,6 +306,8 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                 } else {
                     newCameraObject = capturedVideoDevices.first
                 }
+
+                self.isVideoMirrored = arguments["isVideoMirrored"] as? Bool ?? true
                 
                 self.orientation = arguments["orientation"] as? Double ?? 0
                 
@@ -500,7 +507,7 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                             self.captureSession.addOutput(videoOutput)
                             for connection in videoOutput.connections {
                                 if connection.isVideoMirroringSupported {
-                                    connection.isVideoMirrored = true
+                                    connection.isVideoMirrored = self.isVideoMirrored
                                 }
 //                                #if compiler(<5.8.1)
                                     if #available(macOS 14.0, *), connection.isVideoRotationAngleSupported(self.orientation){
@@ -519,7 +526,7 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                             self.captureSession.addOutput(videoOutput)
                             for connection in videoOutput.connections {
                                 if connection.isVideoMirroringSupported {
-                                    connection.isVideoMirrored = true
+                                    connection.isVideoMirrored = self.isVideoMirrored
                                 }
 //                                #if compiler(<5.8.1)
                                 if #available(macOS 14.0, *),  connection.isVideoRotationAngleSupported(self.orientation){

@@ -38,6 +38,7 @@ abstract class CameraMacOSPlatform extends PlatformInterface {
     AudioQuality audioQuality = AudioQuality.max,
     Torch toggleTorch = Torch.off,
     CameraOrientation orientation = CameraOrientation.orientation0deg,
+    bool isVideoMirrored = true,
     required CameraMacOSMode cameraMacOSMode,
   }) {
     throw UnimplementedError("");
@@ -86,6 +87,10 @@ abstract class CameraMacOSPlatform extends PlatformInterface {
     throw UnimplementedError("");
   }
 
+  Future<void> setVideoMirrored(bool isVideoMirrored) {
+    throw UnimplementedError("");
+  }
+  
   Future<void> toggleTorch(Torch torch) {
     throw UnimplementedError("");
   }
