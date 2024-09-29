@@ -80,6 +80,10 @@ class CameraMacOSController {
     _platformInstance.setOrientation(orientation);
   }
 
+  Future<void> setVideoMirrored(bool isVideoMirrored) async {
+    _platformInstance.setVideoMirrored(isVideoMirrored);
+  }
+
   /// Getter that checks if a video is currently recording
   bool get isRecording =>
       (_platformInstance as MethodChannelCameraMacOS).isRecording;
