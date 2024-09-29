@@ -37,6 +37,7 @@ class MainContainerWidgetState extends State<MainContainerWidget> {
   bool enableTorch = false;
   bool usePlatformView = false;
   bool streamImage = false;
+  bool isVideoMirrored = true;
 
   CameraImageData? streamedImage;
 
@@ -264,6 +265,8 @@ class MainContainerWidgetState extends State<MainContainerWidget> {
                                                     selectedVideoFormat,
                                                 audioFormat:
                                                     selectedAudioFormat,
+                                                isVideoMirrored:
+                                                    isVideoMirrored,
                                                 onCameraInizialized:
                                                     (CameraMacOSController
                                                         controller) {
@@ -597,6 +600,21 @@ class MainContainerWidgetState extends State<MainContainerWidget> {
                                         !this.enableTorch
                                             ? Torch.on
                                             : Torch.off);
+                                  });
+                                },
+                              ),
+                              CheckboxListTile(
+                                value: isVideoMirrored,
+                                contentPadding: EdgeInsets.zero,
+                                tristate: false,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                title: Text("Mirror video"),
+                                onChanged: (bool? newValue) {
+                                  setState(() {
+                                    this.isVideoMirrored = newValue ?? false;
+                                    macOSController
+                                        ?.setVideoMirrored(isVideoMirrored);
                                   });
                                 },
                               ),

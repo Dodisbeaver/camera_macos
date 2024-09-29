@@ -90,7 +90,7 @@ abstract class CameraMacOSPlatform extends PlatformInterface {
   Future<void> setVideoMirrored(bool isVideoMirrored) {
     throw UnimplementedError("");
   }
-  
+
   Future<void> toggleTorch(Torch torch) {
     throw UnimplementedError("");
   }

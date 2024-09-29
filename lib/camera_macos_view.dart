@@ -91,18 +91,19 @@ class CameraMacOSViewState extends State<CameraMacOSView> {
     super.initState();
     initializeCameraFuture = CameraMacOSPlatform.instance
         .initialize(
-            deviceId: widget.deviceId,
-            audioDeviceId: widget.audioDeviceId,
-            cameraMacOSMode: widget.cameraMode,
-            enableAudio: widget.enableAudio,
-            resolution: widget.resolution,
-            audioQuality: widget.audioQuality,
-            videoFormat: widget.videoFormat,
-            audioFormat: widget.audioFormat,
-            pictureFormat: widget.pictureFormat,
-            toggleTorch: widget.toggleTorch,
-            orientation: widget.orientation,
-            isVideoMirrored: widget.isVideoMirrored)
+      deviceId: widget.deviceId,
+      audioDeviceId: widget.audioDeviceId,
+      cameraMacOSMode: widget.cameraMode,
+      enableAudio: widget.enableAudio,
+      resolution: widget.resolution,
+      audioQuality: widget.audioQuality,
+      videoFormat: widget.videoFormat,
+      audioFormat: widget.audioFormat,
+      pictureFormat: widget.pictureFormat,
+      toggleTorch: widget.toggleTorch,
+      orientation: widget.orientation,
+      isVideoMirrored: widget.isVideoMirrored,
+    )
         .then((value) {
       if (value != null) {
         this.arguments = value;
