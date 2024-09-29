@@ -269,19 +269,45 @@ class MethodChannelCameraMacOS extends CameraMacOSPlatform {
 
   @override
   Future<void> startImageStream(
-      void Function(CameraImageData image) onAvailable) async {
-    events = eventChannel.receiveBroadcastStream().listen((data) {
-      onAvailable(CameraImageData(
-          width: data['width'],
-          height: data['height'],
-          bytesPerRow: data['bytesPerRow'],
-          bytes: Uint8List.fromList(data['data'])));
-    });
+      void Function(CameraImageData? image) onAvailable,
+      {void Function(dynamic)? onError}) async {
+    events = eventChannel.receiveBroadcastStream().listen(
+      (data) {
+        if (data is Map) {
+          onAvailable(
+            CameraImageData(
+              width: data['width'],
+              height: data['height'],
+              bytesPerRow: data['bytesPerRow'],
+              bytes: Uint8List.fromList(data['data']),
+            ),
+          );
+        } else if (onError != null) {
+          onError(
+            CameraMacOSException(
+              code: "INVALID_FORMAT",
+              message: "Stream data is not in a valid format",
+              details: data,
+            ),
+          );
+        }
+      },
+      onError: onError,
+    );
   }
 
   @override
   Future<void> stopImageStream() async {
-    events?.cancel();
+    try {
+      await events?.cancel();
+      events = null;
+    } catch (e) {
+      throw CameraMacOSException(
+        code: "CANNOT_STOP_STREAM",
+        message: "Image stream cannot be stopped",
+        details: e.toString(),
+      );
+    }
   }
 
   @override

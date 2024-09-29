@@ -897,6 +897,9 @@ class MainContainerWidgetState extends State<MainContainerWidget> {
             (p0) {
               print(p0.toString());
             },
+            onError: (dynamic err) {
+              print(err.toString());
+            },
           );
         });
       }

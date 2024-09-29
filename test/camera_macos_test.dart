@@ -61,7 +61,9 @@ class MockCameraMacOSPlatform
 
   @override
   Future<void> startImageStream(
-      void Function(CameraImageData) onAvailable) async {
+    void Function(CameraImageData) onAvailable, {
+    void Function(dynamic)? onError,
+  }) async {
     throw UnimplementedError("");
   }
 
