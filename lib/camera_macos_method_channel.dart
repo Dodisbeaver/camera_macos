@@ -87,8 +87,8 @@ class MethodChannelCameraMacOS extends CameraMacOSPlatform {
       Torch toggleTorch = Torch.off,
 
       /// Set camera orientation
-      CameraOrientation orientation =
-          CameraOrientation.orientation0deg}) async {
+      CameraOrientation orientation = CameraOrientation.orientation0deg,
+      bool isVideoMirrored = true}) async {
     try {
       final Map<String, dynamic>? result =
           await methodChannel.invokeMapMethod<String, dynamic>(
@@ -101,6 +101,7 @@ class MethodChannelCameraMacOS extends CameraMacOSPlatform {
           'resolution': resolution.name,
           'quality': audioQuality.name,
           'orientation': orientation.index * 90.0,
+          'isVideoMirrored': isVideoMirrored,
           'torch': toggleTorch.index,
           'pformat': pictureFormat.name,
           'vformat': videoFormat.name,
@@ -352,6 +353,16 @@ class MethodChannelCameraMacOS extends CameraMacOSPlatform {
       'setOrientation',
       <String, dynamic>{
         'orientation': orientation.index,
+      },
+    );
+  }
+
+  @override
+  Future<void> setVideoMirrored(bool isVideoMirrored) {
+    return methodChannel.invokeMethod<void>(
+      'setVideoMirrored',
+      <String, dynamic>{
+        'isVideoMirrored': isVideoMirrored,
       },
     );
   }
