@@ -6,12 +6,11 @@ import CoreVideo.CVPixelBuffer
 import Accelerate.vecLib
 import CoreImage.CIContext
 
-public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, AVAssetWriterDelegate, AVCaptureFileOutputRecordingDelegate,
-    FlutterStreamHandler{
+public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, AVAssetWriterDelegate, AVCaptureFileOutputRecordingDelegate {
     
     let registry: FlutterTextureRegistry
     let outputChannel: FlutterMethodChannel!
-    var sink: FlutterEventSink!
+    var imageStreamHandler: ImageStreamHandler!
     
     // Texture id of the camera preview
     var textureId: Int64!
@@ -75,17 +74,6 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
         self.outputChannel = outputChannel
         super.init()
     }
-    // FlutterStreamHandler
-    public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-        sink = events
-        return nil
-    }
-    
-    // FlutterStreamHandler
-    public func onCancel(withArguments arguments: Any?) -> FlutterError? {
-        sink = nil
-        return nil
-    }
     
     public static func register(with registrar: FlutterPluginRegistrar) {
         let inputChannel = FlutterMethodChannel(name: "camera_macos", binaryMessenger: registrar.messenger)
@@ -97,29 +85,33 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
         instance.factory = factory
         
         // Channel for communicating with platform plugins using event streams
-        let event = FlutterEventChannel(name:"camera_macos/stream", binaryMessenger: registrar.messenger)
-        registrar.addMethodCallDelegate(instance, channel: outputChannel)
-        event.setStreamHandler(instance)
+        instance.imageStreamHandler = ImageStreamHandler(id: "camera_macos/stream", messenger: registrar.messenger)
     }
     
     public func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
         if latestBuffer == nil {
             return nil
         }
-        if self.sink != nil{
+        if let imageStreamHandler = self.imageStreamHandler {
             let u = imageFromSampleBuffer(imageBuffer: latestBuffer)!
             let bytesPerRow = u.bytesPerRow
             let width = Int(u.size.width)
             let height = Int(u.size.height)
             
-            let newData:Data = Data(bytes: u.bitmapData!, count: Int(bytesPerRow*height))
-            
-            self.sink([
-                "width": width,
-                "height": height,
-                "bytesPerRow": bytesPerRow,
-                "data": newData,
-            ] as [String:Any]);
+            DispatchQueue.main.async {
+                do {
+                    let newData:Data = Data(bytes: u.bitmapData!, count: Int(bytesPerRow*height))
+                    
+                    try imageStreamHandler.success([
+                        "width": width,
+                        "height": height,
+                        "bytesPerRow": bytesPerRow,
+                        "data": newData,
+                    ] as [String:Any]);
+                } catch(let err) {
+                    imageStreamHandler.error(code: "IMAGE_STREAM_ERROR", message: err.localizedDescription)
+                }
+            }
         }
         
         return Unmanaged<CVPixelBuffer>.passRetained(latestBuffer)
@@ -837,7 +829,9 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                                             if self.isRecording && videoWriter.status == .writing {
                                                 self.stopRecording { callbackResult in
                                                     if let outputChannel = self.outputChannel {
-                                                        outputChannel.invokeMethod("onVideoRecordingFinished", arguments: callbackResult)
+                                                        DispatchQueue.main.async {
+                                                            outputChannel.invokeMethod("onVideoRecordingFinished", arguments: callbackResult)
+                                                        }
                                                     }
                                                 }
                                             }
