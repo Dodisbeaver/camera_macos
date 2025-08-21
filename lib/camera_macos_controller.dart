@@ -28,6 +28,8 @@ class CameraMacOSController {
     /// Enable audio (this flag overrides the initialization setting)
     bool? enableAudio,
 
+    VideoCropSettings? cropSettings,
+
     /// Called only when the video has reached the max duration pointed by maxVideoDuration
     Function(CameraMacOSFile?, CameraMacOSException?)? onVideoRecordingFinished,
   }) {
@@ -35,6 +37,7 @@ class CameraMacOSController {
       maxVideoDuration: maxVideoDuration,
       enableAudio: enableAudio,
       url: url,
+      cropSettings: cropSettings,
       onVideoRecordingFinished: onVideoRecordingFinished,
     );
   }

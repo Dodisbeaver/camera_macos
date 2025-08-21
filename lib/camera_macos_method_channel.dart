@@ -171,6 +171,9 @@ class MethodChannelCameraMacOS extends CameraMacOSPlatform {
     /// A URL location to save the video
     String? url,
 
+    /// Video crop settings
+    VideoCropSettings? cropSettings,
+
     /// Called only when the video has reached the max duration pointed by maxVideoDuration
     Function(CameraMacOSFile?, CameraMacOSException?)? onVideoRecordingFinished,
   }) async {
@@ -188,6 +191,7 @@ class MethodChannelCameraMacOS extends CameraMacOSPlatform {
           "maxVideoDuration": maxVideoDuration,
           "url": url,
           "enableAudio": enableAudio,
+          "cropSettings": cropSettings?.toMap(),
         },
       );
       if (result == null) {

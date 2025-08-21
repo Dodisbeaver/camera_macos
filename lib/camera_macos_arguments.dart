@@ -13,6 +13,8 @@ enum CameraMacOSMode { photo, video }
 
 enum AudioQuality { min, low, medium, high, max }
 
+enum CropAlignment { center, top, bottom, left, right }
+
 enum AudioFormat {
   kAudioFormat60958AC3,
   kAudioFormatAC3,
@@ -121,4 +123,27 @@ class CameraMacOSArguments {
     required this.size,
     this.devices,
   });
+}
+
+class VideoCropSettings {
+  final double aspectRatio;
+  final CropAlignment alignment;
+  final bool enabled;
+
+  const VideoCropSettings({
+    required this.aspectRatio,
+    this.alignment = CropAlignment.center,
+    this.enabled = true,
+  });
+
+  // For 9:16 vertical video
+  static const VideoCropSettings vertical916 = VideoCropSettings(aspectRatio: 9/16);
+
+  Map<String, dynamic> toMap() {
+    return {
+      'aspectRatio': aspectRatio,
+      'alignment': alignment.name,
+      'enabled': enabled,
+    };
+  }
 }

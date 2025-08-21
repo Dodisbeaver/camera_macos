@@ -23,14 +23,30 @@ extension AVCaptureDevice {
     }
     
     public class func captureDevice(mediaType: AVMediaType) -> AVCaptureDevice? {
-        return AVCaptureDevice.devices(for: mediaType).first
+        if #available(macOS 10.15, *) {
+            let deviceTypes: [AVCaptureDevice.DeviceType] = mediaType == .video ? [.builtInWideAngleCamera, .external] : [.microphone, .external]
+            return AVCaptureDevice.DiscoverySession(deviceTypes: deviceTypes, mediaType: mediaType, position: .unspecified).devices.first
+        } else {
+            return AVCaptureDevice.devices(for: mediaType).first
+        }
     }
     
     public class func captureDevices(mediaType: AVMediaType? = nil) -> [AVCaptureDevice] {
-        if let mediaType = mediaType {
-            return AVCaptureDevice.devices(for: mediaType)
+        if #available(macOS 10.15, *) {
+            if let mediaType = mediaType {
+                let deviceTypes: [AVCaptureDevice.DeviceType] = mediaType == .video ? [.builtInWideAngleCamera, .external] : [.microphone, .external]
+                return AVCaptureDevice.DiscoverySession(deviceTypes: deviceTypes, mediaType: mediaType, position: .unspecified).devices
+            } else {
+                let videoDevices = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .external], mediaType: .video, position: .unspecified).devices
+                let audioDevices = AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified).devices
+                return videoDevices + audioDevices
+            }
         } else {
-            return AVCaptureDevice.devices()
+            if let mediaType = mediaType {
+                return AVCaptureDevice.devices(for: mediaType)
+            } else {
+                return AVCaptureDevice.devices()
+            }
         }
     }
     

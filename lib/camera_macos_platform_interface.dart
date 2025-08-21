@@ -57,6 +57,7 @@ abstract class CameraMacOSPlatform extends PlatformInterface {
     double? maxVideoDuration,
     String? url,
     bool? enableAudio,
+    VideoCropSettings? cropSettings,
     Function(CameraMacOSFile?, CameraMacOSException?)? onVideoRecordingFinished,
   }) {
     throw UnimplementedError("");

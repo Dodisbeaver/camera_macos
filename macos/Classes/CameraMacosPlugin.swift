@@ -70,6 +70,10 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
 
     var isVideoMirrored: Bool = true
     
+    private var cropSettings: [String: Any]?
+    private var currentVideoSize: CGSize = CGSize.zero
+    private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
+    
     init(_ registry: FlutterTextureRegistry, _ outputChannel: FlutterMethodChannel) {
         self.registry = registry
         self.outputChannel = outputChannel
@@ -287,7 +291,7 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                 var capturedVideoDevices: [AVCaptureDevice] = []
                 
                 if #available(macOS 10.15, *) {
-                    capturedVideoDevices = AVCaptureDevice.captureDevices(deviceTypes: [.builtInWideAngleCamera, .externalUnknown], mediaType: .video)
+                    capturedVideoDevices = AVCaptureDevice.captureDevices(deviceTypes: [.builtInWideAngleCamera, .external], mediaType: .video)
                 } else {
                     capturedVideoDevices = AVCaptureDevice.captureDevices(mediaType: .video)
                 }
@@ -465,7 +469,7 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                         var capturedAudioDevices: [AVCaptureDevice] = []
                         
                         if #available(macOS 10.15, *) {
-                            capturedAudioDevices = AVCaptureDevice.captureDevices(deviceTypes: [.builtInMicrophone, .externalUnknown], mediaType: .audio)
+                            capturedAudioDevices = AVCaptureDevice.captureDevices(deviceTypes: [.microphone, .external], mediaType: .audio)
                         } else {
                             capturedAudioDevices = AVCaptureDevice.captureDevices(mediaType: .audio)
                         }
@@ -549,6 +553,7 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                     let dimensions = CMVideoFormatDescriptionGetDimensions(newCameraObject.activeFormat.formatDescription)
                     self.videoOutputHeight = dimensions.height
                     self.videoOutputWidth = dimensions.width
+                    self.currentVideoSize = CGSize(width: Int(dimensions.width), height: Int(dimensions.height))
                     let size = ["width": Double(dimensions.width), "height": Double(dimensions.height)]
                     
                     if self.useMovieFileOutput {
@@ -715,6 +720,12 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                 
                 self.enableAudio = shouldRecordAudio
                 
+                if let cropSettingsDict = arguments["cropSettings"] as? [String: Any] {
+                    self.cropSettings = cropSettingsDict
+                } else {
+                    self.cropSettings = nil
+                }
+                
                 // Remove old file
                 var fileUrl: URL!
                 
@@ -740,6 +751,8 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                         result(FlutterError(code: "START_RECORDING_ERROR", message: "Could not start AVMovieFileOutput Recording", details: nil).toFlutterResult)
                         return
                     }
+                    
+                    
                     self.isRecording = true
                     self.savedResult = result
                     movieOutput.startRecording(to: fileUrl, recordingDelegate: self)
@@ -757,9 +770,10 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                     
                     DispatchQueue.main.async {
                         // Add Video Writer Video Input
+                        let outputSize = self.getCroppedVideoSize()
                         var videoWriterVideoInputSettings: [String : Any] = [
-                            AVVideoWidthKey  : self.videoOutputWidth!,
-                            AVVideoHeightKey : self.videoOutputHeight!,
+                            AVVideoWidthKey  : Int(outputSize.width),
+                            AVVideoHeightKey : Int(outputSize.height),
                         ]
                         
                         if #available(macOS 10.13, *) {
@@ -769,11 +783,30 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                         }
                         
                         if let settingsAssistant = self.settingsAssistant, let videoSettings = settingsAssistant.videoSettings, videoWriter.canApply(outputSettings: videoSettings, forMediaType: .video) {
-                            videoWriterVideoInputSettings = videoSettings
+                            // Only use settings assistant if we're not cropping
+                            if !self.shouldCropVideo() {
+                                videoWriterVideoInputSettings = videoSettings
+                            }
                         }
                         
                         let videoWriterVideoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoWriterVideoInputSettings)
                         videoWriterVideoInput.expectsMediaDataInRealTime = true
+                        
+                        // Create pixel buffer adaptor if cropping is enabled
+                        if self.shouldCropVideo() {
+                            let pixelBufferAttributes: [String: Any] = [
+                                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                                kCVPixelBufferWidthKey as String: Int(outputSize.width),
+                                kCVPixelBufferHeightKey as String: Int(outputSize.height),
+                            ]
+                            self.pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
+                                assetWriterInput: videoWriterVideoInput,
+                                sourcePixelBufferAttributes: pixelBufferAttributes
+                            )
+                        } else {
+                            self.pixelBufferAdaptor = nil
+                        }
+                        
                         if (videoWriter.canAdd(videoWriterVideoInput))
                         {
                             videoWriter.add(videoWriterVideoInput)
@@ -1013,11 +1046,24 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
                         return
                     }
                     if self.canWrite {
-                        let result: Bool = camera.append(sampleBuffer)
-                        if !result && videoWriter.status == .failed {
-                            print("Failed to write video input: AVAssetWriter Error - " + videoWriter.error.debugDescription + " - Frame Order: " + "Previous: \(String(describing: self.latestVideoFrameWrittenTimeStamp)) - Current: \(time)")
-                        } else if result {
-                            self.latestVideoFrameWrittenTimeStamp = time
+                        if self.shouldCropVideo(), let adaptor = self.pixelBufferAdaptor, let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                            // Use pixel buffer adaptor for cropping
+                            if let croppedBuffer = self.cropPixelBuffer(imageBuffer) {
+                                let result = adaptor.append(croppedBuffer, withPresentationTime: time)
+                                if result {
+                                    self.latestVideoFrameWrittenTimeStamp = time
+                                } else {
+                                    print("CameraMacosPlugin: Failed to append cropped buffer via adaptor")
+                                }
+                            }
+                        } else {
+                            // Use regular sample buffer appending for non-cropped video
+                            let result: Bool = camera.append(sampleBuffer)
+                            if !result && videoWriter.status == .failed {
+                                print("Failed to write video input: AVAssetWriter Error - " + videoWriter.error.debugDescription + " - Frame Order: " + "Previous: \(String(describing: self.latestVideoFrameWrittenTimeStamp)) - Current: \(time)")
+                            } else if result {
+                                self.latestVideoFrameWrittenTimeStamp = time
+                            }
                         }
                     }
                 }
@@ -1048,6 +1094,110 @@ public class CameraMacosPlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptu
         }
         print("Video Recorded And Saved At: \(outputFileURL.absoluteURL)")
         savedResult(["videoData": videoData, "url": outputFileURL.absoluteURL.path, "error": nil] as [String:Any?])
+    }
+    
+    private func shouldCropVideo() -> Bool {
+        guard let cropSettings = self.cropSettings,
+              let enabled = cropSettings["enabled"] as? Bool else {
+            return false
+        }
+        return enabled
+    }
+    
+    private func getCroppedVideoSize() -> CGSize {
+        guard let cropSettings = self.cropSettings,
+              let aspectRatio = cropSettings["aspectRatio"] as? Double,
+              let enabled = cropSettings["enabled"] as? Bool,
+              enabled == true else {
+            return currentVideoSize
+        }
+        
+        let cropRect = calculateCropRect(
+            videoSize: currentVideoSize,
+            aspectRatio: aspectRatio,
+            alignment: cropSettings["alignment"] as? String ?? "center"
+        )
+        
+        return CGSize(width: cropRect.width, height: cropRect.height)
+    }
+
+    private func calculateCropRect(videoSize: CGSize, aspectRatio: Double, alignment: String) -> CGRect {
+        let targetWidth = videoSize.height * aspectRatio
+        let targetHeight = videoSize.height
+        
+
+        let x: CGFloat
+        switch alignment {
+        case "left":
+            x = 0
+        case "right":
+            x = videoSize.width - targetWidth
+        default:
+            x = (videoSize.width - targetWidth) / 2
+        }
+        
+        let cropRect = CGRect(x: x, y: 0, width: targetWidth, height: targetHeight)
+        return cropRect
+    }
+    
+    private func cropPixelBuffer(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
+        guard shouldCropVideo(),
+              let cropSettings = self.cropSettings,
+              let aspectRatio = cropSettings["aspectRatio"] as? Double else {
+            return pixelBuffer
+        }
+        
+        let cropRect = calculateCropRect(
+            videoSize: currentVideoSize,
+            aspectRatio: aspectRatio,
+            alignment: cropSettings["alignment"] as? String ?? "center"
+        )
+        
+        let attributes: [String: Any] = [
+            kCVPixelBufferCGImageCompatibilityKey as String: true,
+            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true
+        ]
+        
+        var croppedPixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            Int(cropRect.width),
+            Int(cropRect.height),
+            CVPixelBufferGetPixelFormatType(pixelBuffer),
+            attributes as CFDictionary,
+            &croppedPixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let outputBuffer = croppedPixelBuffer else {
+            return pixelBuffer
+        }
+        
+        CVPixelBufferLockBaseAddress(pixelBuffer, CVPixelBufferLockFlags.readOnly)
+        CVPixelBufferLockBaseAddress(outputBuffer, CVPixelBufferLockFlags(rawValue: 0))
+        
+        guard let sourceBaseAddress = CVPixelBufferGetBaseAddress(pixelBuffer),
+              let destBaseAddress = CVPixelBufferGetBaseAddress(outputBuffer) else {
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags.readOnly)
+            CVPixelBufferUnlockBaseAddress(outputBuffer, CVPixelBufferLockFlags(rawValue: 0))
+            return pixelBuffer
+        }
+        
+        let sourceBytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        let destBytesPerRow = CVPixelBufferGetBytesPerRow(outputBuffer)
+        let bytesPerPixel = 4 // BGRA format
+        
+        let sourceStartAddress = sourceBaseAddress.advanced(by: Int(cropRect.origin.y) * sourceBytesPerRow + Int(cropRect.origin.x) * bytesPerPixel)
+        
+        for row in 0..<Int(cropRect.height) {
+            let sourceRowAddress = sourceStartAddress.advanced(by: row * sourceBytesPerRow)
+            let destRowAddress = destBaseAddress.advanced(by: row * destBytesPerRow)
+            memcpy(destRowAddress, sourceRowAddress, Int(cropRect.width) * bytesPerPixel)
+        }
+        
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags.readOnly)
+        CVPixelBufferUnlockBaseAddress(outputBuffer, CVPixelBufferLockFlags(rawValue: 0))
+        
+        return outputBuffer
     }
     
 }
